@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npx prisma generate && tsc",
+    "build": "npx prisma generate && tsup src/index.ts --format cjs --out-dir dist --clean --no-splitting --minify",
     "start": "node dist/index.js",
     "seed": "tsx src/seed.ts"
   },
@@ -38,6 +38,7 @@
     "@types/node-cron": "^3.0.11",
     "prisma": "^7.8.0",
     "ts-node-dev": "^2.0.0",
+    "tsup": "^8.5.1",
     "typescript": "^6.0.3"
   }
 }

@@ -3,7 +3,7 @@ import { getServices, createService, updateService, deleteService } from '../con
 import { getBarbers, createBarber } from '../controllers/barberController';
 import { createAppointment, getAppointments } from '../controllers/appointmentController';
 import { createRating, getRatings, getRatingsStats } from '../controllers/ratingController';
-import { registerCustomer, loginCustomer, getCustomerProfile } from '../controllers/customerController';
+import { registerCustomer, loginCustomer, getCustomerProfile, cancelAppointment } from '../controllers/customerController';
 import { getAuthUrl, setTokens } from '../services/googleCalendar';
 import { login, updateAppointmentStatus } from '../controllers/adminController';
 import { authMiddleware, customerAuthMiddleware } from '../utils/auth';
@@ -113,7 +113,7 @@ router.get('/auth/callback', async (req, res) => {
       });
       for (const app of confirmedApps) {
         try {
-          const { createCalendarEvent } = await import('../services/googleCalendar');
+          const { createCalendarEvent } = await import('../services/googleCalendar.js');
           const event = await createCalendarEvent(tokens, {
             summary: `${app.service.name} - ${app.customerName}`,
             description: `Cliente: ${app.customerName}\nTelefone: ${app.customerPhone}`,
