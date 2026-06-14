@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Admin {
+  id       String @id @default(uuid())
+  username String @unique
+  password String
+}
+
+model Service {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  price        Float
+  duration     Int // in minutes
+  appointments Appointment[]
+}
+
+model Barber {
+  id               String         @id @default(uuid())
+  name             String
+  email            String         @unique
+  googleCalendarId String?
+  googleTokens     String? // New field to store JSON tokens
+  appointments     Appointment[]
+  schedules        WorkSchedule[]
+}
+
+model WorkSchedule {
+  id        String  @id @default(uuid())
+  dayOfWeek Int // 0 (Sunday) to 6 (Saturday)
+  startTime String // "09:00"
+  endTime   String // "18:00"
+  isActive  Boolean @default(true)
+
+  barber   Barber @relation(fields: [barberId], references: [id])
+  barberId String
+}
+
+model Customer {
+  id            String        @id @default(uuid())
+  name          String
+  email         String        @unique
+  password      String?
+  googleId      String?       @unique
+  phone         String        @unique
+  loyaltyPoints Int           @default(0) // 1 point per completed appointment
+  isRegistered  Boolean       @default(true) // Always true now if they exist in this new flow
+  appointments  Appointment[]
+  createdAt     DateTime      @default(now())
+}
+
+model Appointment {
+  id            String   @id @default(uuid())
+  customerName  String
+  customerPhone String
+  startTime     DateTime
+  endTime       DateTime
+  googleEventId String?
+  status        String   @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED
+
+  service   Service @relation(fields: [serviceId], references: [id])
+  serviceId String
+
+  barber   Barber @relation(fields: [barberId], references: [id])
+  barberId String
+
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?
+
+  rating    Rating?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Rating {
+  id            String      @id @default(uuid())
+  score         Int // 1-5
+  comment       String?
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  appointmentId String      @unique
+  createdAt     DateTime    @default(now())
+}
+
+model AnticipationNotification {
+  id            String   @id @default(uuid())
+  appointmentId String // The later appointment that could be moved
+  slotId        String // The ID of the cancelled appointment (the slot)
+  sentAt        DateTime @default(now())
+
+  @@unique([appointmentId, slotId])
+}
