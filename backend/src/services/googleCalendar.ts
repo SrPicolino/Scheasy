@@ -23,7 +23,7 @@ export const getAuthUrl = (role: string = 'admin') => {
   });
 };
 
-export const setTokens = async (code: string) => {
+export const setTokens = async (code: string): Promise<any> => {
   const { tokens } = await oauth2Client.getToken(code);
   oauth2Client.setCredentials(tokens);
   return tokens;
