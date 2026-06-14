@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npx prisma generate && tsup src/index.ts --format cjs --out-dir dist --clean --no-splitting --minify --external @prisma/client",
-    "start": "node dist/index.js",
+    "build": "npx prisma generate",
+    "start": "tsx src/index.ts",
     "seed": "tsx src/seed.ts"
   },
   "keywords": [],
