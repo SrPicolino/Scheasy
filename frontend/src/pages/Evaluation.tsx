@@ -2,8 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { Star, CheckCircle } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
-
-const API_URL = 'http://localhost:3001/api';
+import API_URL from '../config';
 
 export default function Evaluation() {
   const { appointmentId } = useParams();

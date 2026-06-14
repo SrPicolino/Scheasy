@@ -4,8 +4,7 @@ import { User, LogOut, Calendar, Award, Scissors, Clock, Mail, Lock, Phone, Arro
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
-
-const API_URL = 'http://localhost:3001/api';
+import API_URL from '../config';
 
 export default function ClientProfile() {
   const navigate = useNavigate();

@@ -19,8 +19,7 @@ import {
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-const API_URL = 'http://localhost:3001/api';
+import API_URL from '../config';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'appointments' | 'services' | 'reviews'>('appointments');

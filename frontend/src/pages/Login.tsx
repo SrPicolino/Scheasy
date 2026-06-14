@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { Lock, User } from 'lucide-react';
-
-const API_URL = 'http://localhost:3001/api';
+import API_URL from '../config';
 
 export default function Login() {
   const [username, setUsername] = useState('');
