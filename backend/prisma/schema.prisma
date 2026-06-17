@@ -19,6 +19,7 @@ model Service {
   price       Float
   duration    Int // in minutes
   appointments Appointment[]
+  waitingList  WaitingList[]
 }
 
 model Barber {
@@ -29,6 +30,7 @@ model Barber {
   googleTokens     String?       // New field to store JSON tokens
   appointments     Appointment[]
   schedules        WorkSchedule[]
+  waitingList      WaitingList[]
 }
 
 model WorkSchedule {
@@ -49,9 +51,11 @@ model Customer {
   password      String?
   googleId      String?  @unique
   phone         String   @unique
+  address       String?  // New field
   loyaltyPoints Int      @default(0) // 1 point per completed appointment
   isRegistered  Boolean  @default(true) // Always true now if they exist in this new flow
   appointments  Appointment[]
+  waitingList   WaitingList[]
   createdAt     DateTime @default(now())
 }
 
@@ -76,6 +80,23 @@ model Appointment {
   rating    Rating?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model WaitingList {
+  id            String   @id @default(uuid())
+  customerName  String
+  customerPhone String
+  startTime     DateTime
+  serviceId     String
+  service       Service  @relation(fields: [serviceId], references: [id])
+  barberId      String
+  barber        Barber   @relation(fields: [barberId], references: [id])
+  customerId    String?
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  status        String    @default("WAITING") // WAITING, NOTIFIED, EXPIRED
+  createdAt     DateTime @default(now())
+
+  @@index([startTime, barberId])
 }
 
 model Rating {

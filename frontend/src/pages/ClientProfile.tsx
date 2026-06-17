@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { User, LogOut, Calendar, Award, Scissors, Clock, Mail, Lock, Phone, ArrowLeft, Star, XCircle, ChevronRight, MessageSquare, Eye, EyeOff } from 'lucide-react';
+import { User, LogOut, Calendar, Award, Scissors, Clock, Mail, Lock, Phone, ArrowLeft, Star, XCircle, ChevronRight, MessageSquare, Eye, EyeOff, MapPin, List, Edit2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import API_URL from '../config';
 
 export default function ClientProfile() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [customer, setCustomer] = useState<any>(null);
   const [error, setError] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'appointments' | 'evaluations'>('appointments');
+  const [activeSubTab, setActiveSubTab] = useState<'appointments' | 'evaluations' | 'edit'>('appointments');
   const [showPassword, setShowPassword] = useState(false);
   
   // Login/Register States
@@ -20,8 +21,21 @@ export default function ClientProfile() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+
+  // Edit States
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [updateLoading, setUpdateLoading] = useState(false);
 
   const token = localStorage.getItem('customerToken');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('tab') === 'evaluations') setActiveSubTab('evaluations');
+    if (params.get('edit') === 'true') setActiveSubTab('edit');
+  }, [location]);
 
   useEffect(() => {
     if (token) {
@@ -37,6 +51,9 @@ export default function ClientProfile() {
         headers: { Authorization: `Bearer ${token}` }
       });
       setCustomer(res.data);
+      setEditName(res.data.name);
+      setEditPhone(res.data.phone);
+      setEditAddress(res.data.address || '');
     } catch (err) {
       localStorage.removeItem('customerToken');
     } finally {
@@ -52,8 +69,12 @@ export default function ClientProfile() {
       localStorage.setItem('customerToken', res.data.token);
       setCustomer(res.data.customer);
       const params = new URLSearchParams(window.location.search);
-      if (params.get('returnTo') === 'booking') window.location.href = '/';
-      else fetchProfile();
+      if (params.get('returnTo') === 'booking') {
+        navigate('/');
+      } else {
+        // Just refresh the profile data to show the dashboard
+        fetchProfile();
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Erro no login.');
     } finally {
@@ -65,16 +86,40 @@ export default function ClientProfile() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/customer/register`, { name, email, password, phone });
+      const res = await axios.post(`${API_URL}/customer/register`, { name, email, password, phone, address });
       localStorage.setItem('customerToken', res.data.token);
       setCustomer(res.data.customer);
       const params = new URLSearchParams(window.location.search);
-      if (params.get('returnTo') === 'booking') window.location.href = '/';
-      else fetchProfile();
+      if (params.get('returnTo') === 'booking') {
+        navigate('/');
+      } else {
+        fetchProfile();
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Erro no cadastro.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdateLoading(true);
+    try {
+      await axios.put(`${API_URL}/customer/profile`, {
+        name: editName,
+        phone: editPhone,
+        address: editAddress
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Perfil atualizado com sucesso!');
+      fetchProfile();
+      setActiveSubTab('appointments');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Erro ao atualizar perfil.');
+    } finally {
+      setUpdateLoading(false);
     }
   };
 
@@ -98,6 +143,7 @@ export default function ClientProfile() {
   const logout = () => {
     localStorage.removeItem('customerToken');
     setCustomer(null);
+    navigate('/');
   };
 
   if (loading) return (
@@ -107,9 +153,16 @@ export default function ClientProfile() {
   );
 
   if (customer) {
-    const upcoming = customer.appointments.filter((a: any) => new Date(a.startTime) > new Date() && a.status !== 'CANCELLED');
-    const past = customer.appointments.filter((a: any) => new Date(a.startTime) <= new Date() || a.status === 'CANCELLED');
-    const ratings = customer.appointments.filter((a: any) => a.rating).map((a: any) => ({ ...a.rating, service: a.service, barber: a.barber, startTime: a.startTime }));
+    const appointments = customer.appointments || [];
+    // Upcoming: only PENDING or CONFIRMED that are in the future
+    const upcoming = appointments.filter((a: any) => 
+      (a.status === 'PENDING' || a.status === 'CONFIRMED') && new Date(a.startTime) > new Date()
+    );
+    // Past: COMPLETED, CANCELLED, or any PENDING/CONFIRMED that already passed
+    const past = appointments.filter((a: any) => 
+      a.status === 'COMPLETED' || a.status === 'CANCELLED' || new Date(a.startTime) <= new Date()
+    );
+    const ratings = appointments.filter((a: any) => a.rating).map((a: any) => ({ ...a.rating, service: a.service, barber: a.barber, startTime: a.startTime }));
 
     return (
       <div className="min-h-screen bg-gray-50 py-12 px-4">
@@ -123,6 +176,14 @@ export default function ClientProfile() {
               <div>
                 <h1 className="text-3xl font-black mb-1">Olá, {customer.name}!</h1>
                 <p className="text-gray-400 flex items-center"><Mail size={14} className="mr-2" /> {customer.email}</p>
+                {customer.address && <p className="text-gray-500 text-xs flex items-center mt-1"><MapPin size={12} className="mr-2" /> {customer.address}</p>}
+                
+                <button 
+                  onClick={() => navigate('/')}
+                  className="mt-4 bg-white text-black px-4 py-2 rounded-xl text-xs font-black flex items-center hover:bg-gray-200 transition shadow-lg"
+                >
+                  <Scissors size={14} className="mr-2" /> AGENDAR NOVO SERVIÇO
+                </button>
               </div>
               <div className="mt-6 md:mt-0 bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 text-center min-w-[140px]">
                 <div className="text-[10px] uppercase font-bold text-purple-300 tracking-widest mb-1">Cartão Fidelidade</div>
@@ -146,12 +207,18 @@ export default function ClientProfile() {
               onClick={() => setActiveSubTab('evaluations')}
               className={`flex-1 flex items-center justify-center py-3 rounded-lg text-sm font-bold transition ${activeSubTab === 'evaluations' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              <Star size={16} className="mr-2" /> Minhas Avaliações
+              <Star size={16} className="mr-2" /> Avaliações
+            </button>
+            <button 
+              onClick={() => setActiveSubTab('edit')}
+              className={`flex-1 flex items-center justify-center py-3 rounded-lg text-sm font-bold transition ${activeSubTab === 'edit' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <Edit2 size={16} className="mr-2" /> Editar Perfil
             </button>
           </div>
 
           <div className="space-y-8">
-            {activeSubTab === 'appointments' ? (
+            {activeSubTab === 'appointments' && (
               <>
                 {/* Upcoming */}
                 {upcoming.length > 0 && (
@@ -205,6 +272,15 @@ export default function ClientProfile() {
                         }`}>
                           {app.status === 'COMPLETED' ? 'CONCLUÍDO' : app.status === 'CANCELLED' ? 'CANCELADO' : app.status}
                         </span>
+                        
+                        {app.status === 'COMPLETED' && !app.rating && (
+                          <button 
+                            onClick={() => navigate(`/evaluate/${app.id}`)}
+                            className="ml-4 flex items-center bg-yellow-400 text-black text-[10px] font-black px-3 py-1.5 rounded-full hover:bg-yellow-500 transition shadow-sm"
+                          >
+                            <Star size={12} className="mr-1" fill="currentColor" /> AVALIAR
+                          </button>
+                        )}
                       </div>
                     )) : (
                       <div className="p-12 text-center text-gray-400 text-sm italic">Nenhum registro anterior.</div>
@@ -212,8 +288,9 @@ export default function ClientProfile() {
                   </div>
                 </section>
               </>
-            ) : (
-              /* Evaluations History */
+            )}
+
+            {activeSubTab === 'evaluations' && (
               <section className="space-y-4">
                 {ratings.length > 0 ? ratings.map((r: any) => (
                   <div key={r.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -240,6 +317,38 @@ export default function ClientProfile() {
                     <p className="text-gray-500 font-medium">Você ainda não avaliou nenhum serviço.</p>
                   </div>
                 )}
+              </section>
+            )}
+
+            {activeSubTab === 'edit' && (
+              <section className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+                <h3 className="text-xl font-black mb-6 flex items-center"><Edit2 className="mr-2" /> Meus Dados Pessoais</h3>
+                <form onSubmit={handleUpdateProfile} className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-black uppercase text-gray-400 mb-2 ml-1">Nome Completo</label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-3.5 text-gray-400" size={18} />
+                      <input required type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full pl-12 p-3.5 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-black transition outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black uppercase text-gray-400 mb-2 ml-1">WhatsApp</label>
+                    <div className="relative">
+                      <Phone className="absolute left-4 top-3.5 text-gray-400" size={18} />
+                      <input required type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full pl-12 p-3.5 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-black transition outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black uppercase text-gray-400 mb-2 ml-1">Endereço (Opcional)</label>
+                    <div className="relative">
+                      <MapPin className="absolute left-4 top-3.5 text-gray-400" size={18} />
+                      <input type="text" value={editAddress} onChange={e => setEditAddress(e.target.value)} className="w-full pl-12 p-3.5 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-black transition outline-none" placeholder="Ex: Rua A, 123" />
+                    </div>
+                  </div>
+                  <button disabled={updateLoading} type="submit" className="w-full bg-black text-white p-4 rounded-2xl font-black text-lg hover:bg-gray-800 transition disabled:opacity-50 shadow-lg">
+                    {updateLoading ? 'SALVANDO...' : 'SALVAR ALTERAÇÕES'}
+                  </button>
+                </form>
               </section>
             )}
             
@@ -283,6 +392,13 @@ export default function ClientProfile() {
                 <div className="relative">
                   <Phone className="absolute left-4 top-3.5 text-gray-400" size={18} />
                   <input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} className="w-full pl-12 p-3.5 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-black transition outline-none" placeholder="71 99999-9999" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Endereço (Opcional)</label>
+                <div className="relative">
+                  <MapPin className="absolute left-4 top-3.5 text-gray-400" size={18} />
+                  <input type="text" value={address} onChange={e => setAddress(e.target.value)} className="w-full pl-12 p-3.5 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-black transition outline-none" placeholder="Sua rua e número" />
                 </div>
               </div>
             </>

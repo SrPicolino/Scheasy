@@ -3,13 +3,16 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-);
+const createOAuthClient = () => {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+};
 
 export const getAuthUrl = (role: string = 'admin') => {
+  const oauth2Client = createOAuthClient();
   const scopes = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/userinfo.profile',
@@ -18,19 +21,21 @@ export const getAuthUrl = (role: string = 'admin') => {
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
-    prompt: 'select_account',
+    prompt: 'consent', // Ensure we always get a refresh token
     state: role
   });
 };
 
 export const setTokens = async (code: string): Promise<any> => {
+  const oauth2Client = createOAuthClient();
   const { tokens } = await oauth2Client.getToken(code);
-  oauth2Client.setCredentials(tokens);
   return tokens;
 };
 
 export const createCalendarEvent = async (tokens: any, eventDetails: any) => {
+  const oauth2Client = createOAuthClient();
   oauth2Client.setCredentials(tokens);
+  
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
   const event = {
@@ -46,16 +51,22 @@ export const createCalendarEvent = async (tokens: any, eventDetails: any) => {
     },
   };
 
-  const response = await calendar.events.insert({
-    calendarId: 'primary',
-    requestBody: event,
-  });
-
-  return response.data;
+  try {
+    const response = await calendar.events.insert({
+      calendarId: 'primary',
+      requestBody: event,
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('[Google Calendar] API Error:', error.message);
+    throw error;
+  }
 };
 
 export const deleteCalendarEvent = async (tokens: any, eventId: string) => {
+  const oauth2Client = createOAuthClient();
   oauth2Client.setCredentials(tokens);
+  
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
   try {
@@ -69,4 +80,3 @@ export const deleteCalendarEvent = async (tokens: any, eventId: string) => {
     throw error;
   }
 };
-

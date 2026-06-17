@@ -2,11 +2,13 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { sendWhatsAppMessage } from '../services/whatsapp';
+import { format } from 'date-fns';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
 
 export const registerCustomer = async (req: Request, res: Response) => {
-  const { name, email, password, phone } = req.body;
+  const { name, email, password, phone, address } = req.body;
 
   try {
     const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
@@ -16,6 +18,7 @@ export const registerCustomer = async (req: Request, res: Response) => {
         email,
         password: hashedPassword,
         phone,
+        address,
         isRegistered: true,
       },
     });
@@ -27,6 +30,25 @@ export const registerCustomer = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'E-mail ou telefone já cadastrado.' });
     }
     res.status(500).json({ error: 'Falha ao registrar cliente.' });
+  }
+};
+
+export const updateCustomerProfile = async (req: Request, res: Response) => {
+  const customerId = (req as any).customerId;
+  const { name, phone, address } = req.body;
+
+  try {
+    const customer = await prisma.customer.update({
+      where: { id: customerId },
+      data: { name, phone, address },
+    });
+
+    res.json(customer);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'Este telefone já está em uso por outro cliente.' });
+    }
+    res.status(500).json({ error: 'Falha ao atualizar perfil.' });
   }
 };
 
@@ -130,17 +152,35 @@ export const cancelAppointment = async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Notifications (WhatsApp)
-    const { sendWhatsAppMessage } = await import('../services/whatsapp');
-    const timeStr = updated.startTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const dateStr = updated.startTime.toLocaleDateString('pt-BR');
+    // 2. Notifications (WhatsApp) & Waiting List Logic
+    const timeStr = format(updated.startTime, 'HH:mm');
+    const dateStr = format(updated.startTime, 'dd/MM');
     
     // To Customer
     const clientMsg = `Olá ${updated.customerName}, seu agendamento para ${updated.service.name} em ${dateStr} às ${timeStr} foi CANCELADO conforme solicitado.`;
     await sendWhatsAppMessage(updated.customerPhone, clientMsg).catch(() => {});
 
-    // To Barber (Placeholder if barber phone exists, else log)
-    console.log(`[Barber Notification] O barbeiro ${updated.barber.name} foi notificado do cancelamento do cliente ${updated.customerName}.`);
+    // Check waiting list for this specific slot
+    const nextInLine = await prisma.waitingList.findFirst({
+      where: {
+        barberId: updated.barberId,
+        startTime: updated.startTime,
+        status: 'WAITING'
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    if (nextInLine) {
+      const waitlistMsg = `Olá ${nextInLine.customerName}! O horário que você estava aguardando (${dateStr} às ${timeStr} com ${updated.barber.name}) acabou de ficar disponível devido a uma desistência. Acesse nosso site agora para agendar!`;
+      await sendWhatsAppMessage(nextInLine.customerPhone, waitlistMsg).catch(err => {
+        console.error('[WaitingList] Failed to notify:', err.message);
+      });
+
+      await prisma.waitingList.update({
+        where: { id: nextInLine.id },
+        data: { status: 'NOTIFIED' }
+      });
+    }
 
     // 3. Trigger Anticipation Logic
     const { handleAnticipationOpportunity } = await import('../services/anticipationService');

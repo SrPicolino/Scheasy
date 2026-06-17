@@ -1,11 +1,11 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 
 import apiRoutes from './routes/api';
 import { initReminderJob } from './services/reminderService';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

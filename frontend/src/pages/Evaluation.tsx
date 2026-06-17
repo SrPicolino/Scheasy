@@ -18,11 +18,14 @@ export default function Evaluation() {
     if (score === 0) return alert('Por favor, selecione uma nota.');
     
     setLoading(true);
+    const token = localStorage.getItem('customerToken');
     try {
       await axios.post(`${API_URL}/ratings`, {
         appointmentId,
         score,
         comment
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       setSuccess(true);
     } catch (error: any) {

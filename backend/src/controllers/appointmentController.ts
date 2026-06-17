@@ -71,7 +71,7 @@ export const createAppointment = async (req: Request, res: Response) => {
     if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID !== 'your_client_id') {
       if (barber.googleTokens) {
         try {
-          const tokens = JSON.parse(barber.googleTokens);
+          const tokens = typeof barber.googleTokens === 'string' ? JSON.parse(barber.googleTokens) : barber.googleTokens;
           const eventDetails = {
             summary: `${service.name} - ${customerName}`,
             description: `Cliente: ${customerName}\nTelefone: ${customerPhone}\nServiço: ${service.name}\nValor: R$ ${service.price}`,
@@ -79,8 +79,14 @@ export const createAppointment = async (req: Request, res: Response) => {
             endTime: end.toISOString(),
           };
           
-          await createCalendarEvent(tokens, eventDetails);
-          console.log(`[Google Calendar] Event created for ${barber.name}`);
+          const event = await createCalendarEvent(tokens, eventDetails);
+          if (event && event.id) {
+            await prisma.appointment.update({
+              where: { id: appointment.id },
+              data: { googleEventId: event.id }
+            });
+            console.log(`[Google Calendar] Event created and ID saved for ${barber.name}`);
+          }
         } catch (err: any) {
           console.error('[Google Calendar] Failed to create event:', err.message);
         }

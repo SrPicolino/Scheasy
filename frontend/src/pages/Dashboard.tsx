@@ -15,30 +15,51 @@ import {
   Edit2,
   Award,
   Star,
-  MessageSquare
+  MessageSquare,
+  User,
+  Phone,
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval, addDays, startOfDay, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import API_URL from '../config';
 
+const TIME_SLOTS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
+
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'appointments' | 'services' | 'reviews'>('appointments');
+  const [activeTab, setActiveTab] = useState<'appointments' | 'services' | 'reviews' | 'agenda'>('appointments');
   const [appointments, setAppointments] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
+  const [barbers, setBarbers] = useState<any[]>([]);
   const [ratings, setRatings] = useState<any[]>([]);
   const [ratingStats, setRatingStats] = useState<any[]>([]);
   const [ratingPage, setRatingPage] = useState(1);
   const [ratingTotalPages, setRatingTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   
+  // Agenda View States
+  const [selectedAgendaDate, setSelectedAgendaDate] = useState(new Date());
+
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // Service Modal State
+  // Modal States
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [currentService, setCurrentService] = useState<any>(null);
   const [serviceForm, setServiceForm] = useState({ name: '', description: '', price: 0, duration: 30 });
+
+  const [isManualBookingModalOpen, setIsManualBookingModalOpen] = useState(false);
+  const [manualBookingForm, setManualBookingForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    serviceId: '',
+    barberId: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    time: ''
+  });
 
   const token = localStorage.getItem('adminToken');
 
@@ -55,12 +76,23 @@ export default function Dashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [appRes, servRes] = await Promise.all([
+      const [appRes, servRes, barbRes] = await Promise.all([
         axios.get(`${API_URL}/appointments`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_URL}/services`)
+        axios.get(`${API_URL}/services`),
+        axios.get(`${API_URL}/barbers`)
       ]);
       setAppointments(appRes.data);
       setServices(servRes.data);
+      setBarbers(barbRes.data);
+      
+      // Auto-select first barber for manual booking if available
+      if (barbRes.data.length > 0) {
+        setManualBookingForm(prev => ({ ...prev, barberId: barbRes.data[0].id }));
+      }
+      if (servRes.data.length > 0) {
+        setManualBookingForm(prev => ({ ...prev, serviceId: servRes.data[0].id }));
+      }
+
       await fetchRatings();
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -113,6 +145,27 @@ export default function Dashboard() {
     }
   };
 
+  const handleManualBookingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const startTime = new Date(`${manualBookingForm.date}T${manualBookingForm.time}:00`);
+      await axios.post(`${API_URL}/appointments`, {
+        customerName: manualBookingForm.customerName,
+        customerPhone: manualBookingForm.customerPhone,
+        serviceId: manualBookingForm.serviceId,
+        barberId: manualBookingForm.barberId,
+        startTime,
+        customerId: null // Manual booking via admin
+      });
+      setIsManualBookingModalOpen(false);
+      setManualBookingForm({ ...manualBookingForm, customerName: '', customerPhone: '', time: '' });
+      alert('Agendamento realizado com sucesso!');
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Erro ao realizar agendamento manual');
+    }
+  };
+
   const deleteService = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
     try {
@@ -128,6 +181,18 @@ export default function Dashboard() {
   const logout = () => {
     localStorage.removeItem('adminToken');
     window.location.href = '/login';
+  };
+
+  // Agenda Grid Logic
+  const getAgendaForDate = (date: Date) => {
+    const dayApps = appointments.filter(app => 
+      app.status !== 'CANCELLED' && isSameDay(parseISO(app.startTime), date)
+    );
+
+    return TIME_SLOTS.map(slot => {
+      const app = dayApps.find(a => format(parseISO(a.startTime), 'HH:mm') === slot);
+      return { time: slot, appointment: app };
+    });
   };
 
   // Filter and Sort Logic
@@ -176,7 +241,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-black text-white p-6 hidden md:block">
+      <aside className="w-64 bg-black text-white p-6 hidden md:block shrink-0">
         <div className="text-2xl font-bold mb-12 flex items-center">
           <Scissors className="mr-2" /> BarberAdmin
         </div>
@@ -187,6 +252,13 @@ export default function Dashboard() {
           >
             <LayoutDashboard size={20} />
             <span>Dashboard</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('agenda')}
+            className={`flex items-center space-x-3 p-3 w-full rounded-lg transition ${activeTab === 'agenda' ? 'bg-gray-800' : 'text-gray-400 hover:text-white'}`}
+          >
+            <CalendarIcon size={20} />
+            <span>Agenda Diária</span>
           </button>
           <button 
             onClick={() => setActiveTab('services')}
@@ -216,22 +288,29 @@ export default function Dashboard() {
         <header className="flex justify-between items-center mb-10">
           <div>
             <h1 className="text-3xl font-bold">Olá, Barbeiro!</h1>
-            <p className="text-gray-500">Aqui está o que está acontecendo hoje.</p>
+            <p className="text-gray-500">Gestão profissional da sua barbearia.</p>
           </div>
           <div className="flex items-center space-x-4">
+            <button 
+              onClick={() => setIsManualBookingModalOpen(true)}
+              className="bg-black text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-gray-800 transition shadow-lg"
+            >
+              <Plus size={18} className="mr-2" />
+              Novo Agendamento
+            </button>
             <button 
               onClick={() => window.location.href = `${API_URL}/auth/google`}
               className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center hover:bg-gray-50 transition shadow-sm"
             >
               <CalendarIcon size={16} className="mr-2 text-red-500" />
-              Conectar Google Agenda
+              Sincronizar Google
             </button>
-            <span className="text-gray-500 font-medium">{format(new Date(), "dd 'de' MMMM", { locale: ptBR })}</span>
+            <span className="text-gray-500 font-medium hidden lg:block">{format(new Date(), "dd 'de' MMMM", { locale: ptBR })}</span>
             <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white font-bold shadow-lg">A</div>
           </div>
         </header>
 
-        {activeTab === 'appointments' ? (
+        {activeTab === 'appointments' && (
           <>
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
@@ -244,16 +323,19 @@ export default function Dashboard() {
             {/* Appointments Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
-                <h2 className="text-xl font-bold">Gestão de Agendamentos</h2>
+                <h2 className="text-xl font-bold">Últimos Agendamentos</h2>
                 
                 <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4 w-full md:w-auto">
-                  <input 
-                    type="text"
-                    placeholder="Buscar cliente, serviço..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="p-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-black min-w-[200px]"
-                  />
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                    <input 
+                      type="text"
+                      placeholder="Buscar cliente..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-9 p-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-black min-w-[200px]"
+                    />
+                  </div>
                   <select 
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
@@ -266,171 +348,130 @@ export default function Dashboard() {
                     <option value="CANCELLED">Cancelado</option>
                   </select>
                 </div>
-
-                <div className="flex space-x-2">
-                   <span className="flex items-center text-xs text-gray-400"><div className="w-2 h-2 bg-orange-400 rounded-full mr-1"></div> Pendente</span>
-                   <span className="flex items-center text-xs text-gray-400"><div className="w-2 h-2 bg-green-400 rounded-full mr-1"></div> Confirmado</span>
-                   <span className="flex items-center text-xs text-gray-400"><div className="w-2 h-2 bg-blue-400 rounded-full mr-1"></div> Concluído</span>
-                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
-                  <thead className="bg-gray-50 text-gray-500 text-sm uppercase font-semibold">
+                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold tracking-wider">
                     <tr>
                       <th className="px-6 py-4">Cliente</th>
                       <th className="px-6 py-4">Serviço</th>
                       <th className="px-6 py-4">Barbeiro</th>
                       <th className="px-6 py-4">Data/Hora</th>
-                      <th className="px-6 py-4">Fidelidade</th>
                       <th className="px-6 py-4">Status</th>
                       <th className="px-6 py-4 text-center">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {/* Próximos Agendamentos */}
-                    {futureAppointments.length > 0 && (
-                      <tr className="bg-gray-50/50">
-                        <td colSpan={7} className="px-6 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                          Próximos Agendamentos
-                        </td>
-                      </tr>
-                    )}
-                    {futureAppointments.map((app) => (
-                      <tr key={app.id} className="hover:bg-gray-50 transition border-l-4 border-l-black">
+                    {futureAppointments.slice(0, 10).map((app) => (
+                      <tr key={app.id} className="hover:bg-gray-50 transition">
                         <td className="px-6 py-4">
                           <div className="flex items-center">
-                            <div className="font-bold">{app.customerName}</div>
+                            <div className="font-bold text-gray-900">{app.customerName}</div>
                             {app.customer?.isRegistered && (
-                              <span className="ml-2 bg-purple-100 text-purple-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter" title="Membro do Clube de Fidelidade">Clube</span>
+                              <span className="ml-2 bg-purple-100 text-purple-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase">Clube</span>
                             )}
                           </div>
                           <div className="text-xs text-gray-400">{app.customerPhone}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm">{app.service.name}</div>
-                          <div className="text-xs font-mono font-bold text-gray-500">R$ {app.service.price.toFixed(2)}</div>
+                          <div className="text-sm font-medium">{app.service.name}</div>
                         </td>
-                        <td className="px-6 py-4 text-gray-600 font-medium">{app.barber.name}</td>
+                        <td className="px-6 py-4 text-gray-600 text-sm">{app.barber.name}</td>
                         <td className="px-6 py-4">
-                          <div className="text-sm font-bold">{format(new Date(app.startTime), "dd 'de' MMM")}</div>
-                          <div className="text-xs text-gray-500">{format(new Date(app.startTime), 'HH:mm')} - {format(new Date(app.endTime), 'HH:mm')}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {app.customer?.isRegistered ? (
-                            <div className="flex items-center text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-full w-fit">
-                              <Award size={12} className="mr-1" /> {app.customer.loyaltyPoints} pontos
-                            </div>
-                          ) : (
-                            <span className="text-gray-300 text-xs italic">Não membro</span>
-                          )}
+                          <div className="text-sm font-bold">{format(parseISO(app.startTime), "dd/MM/yyyy")}</div>
+                          <div className="text-xs text-gray-500">{format(parseISO(app.startTime), 'HH:mm')}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wider ${
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-widest ${
                             app.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' : 
                             app.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 
                             app.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700' :
                             'bg-orange-100 text-orange-700'
                           }`}>
-                            {app.status === 'PENDING' ? 'PENDENTE' : 
-                             app.status === 'CONFIRMED' ? 'CONFIRMADO' : 
-                             app.status === 'COMPLETED' ? 'CONCLUÍDO' : 'CANCELADO'}
+                            {app.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 text-center">
                           <div className="flex justify-center space-x-1">
                             {app.status === 'PENDING' && (
-                              <button onClick={() => updateAppointmentStatus(app.id, 'CONFIRMED')} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Confirmar"><CheckCircle size={18} /></button>
+                              <button onClick={() => updateAppointmentStatus(app.id, 'CONFIRMED')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg"><CheckCircle size={18} /></button>
                             )}
                             {app.status === 'CONFIRMED' && (
-                              <button onClick={() => updateAppointmentStatus(app.id, 'COMPLETED')} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Marcar como Concluído"><TrendingUp size={18} /></button>
+                              <button onClick={() => updateAppointmentStatus(app.id, 'COMPLETED')} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><TrendingUp size={18} /></button>
                             )}
                             {app.status !== 'CANCELLED' && app.status !== 'COMPLETED' && (
-                              <button onClick={() => updateAppointmentStatus(app.id, 'CANCELLED')} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Cancelar"><XCircle size={18} /></button>
+                              <button onClick={() => updateAppointmentStatus(app.id, 'CANCELLED')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><XCircle size={18} /></button>
                             )}
-                            {(app.status === 'CANCELLED' || app.status === 'COMPLETED') && <span className="text-gray-300">-</span>}
                           </div>
                         </td>
                       </tr>
                     ))}
-
-                    {/* Histórico */}
-                    {pastAppointments.length > 0 && (
-                      <tr className="bg-gray-50/50">
-                        <td colSpan={7} className="px-6 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                          Histórico de Atendimentos
-                        </td>
-                      </tr>
-                    )}
-                    {pastAppointments.map((app) => (
-                      <tr key={app.id} className="hover:bg-gray-50 transition opacity-75">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <div className="font-bold">{app.customerName}</div>
-                            {app.customer?.isRegistered && (
-                              <span className="ml-2 bg-purple-100 text-purple-700 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter" title="Membro do Clube de Fidelidade">Clube</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-400">{app.customerPhone}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm">{app.service.name}</div>
-                          <div className="text-xs font-mono font-bold text-gray-500">R$ {app.service.price.toFixed(2)}</div>
-                        </td>
-                        <td className="px-6 py-4 text-gray-600 font-medium">{app.barber.name}</td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-bold">{format(new Date(app.startTime), "dd 'de' MMM")}</div>
-                          <div className="text-xs text-gray-500">{format(new Date(app.startTime), 'HH:mm')} - {format(new Date(app.endTime), 'HH:mm')}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {app.customer?.isRegistered ? (
-                            <div className="flex items-center text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-full w-fit">
-                              <Award size={12} className="mr-1" /> {app.customer.loyaltyPoints} pontos
-                            </div>
-                          ) : (
-                            <span className="text-gray-300 text-xs italic">Não membro</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wider ${
-                            app.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' : 
-                            app.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 
-                            app.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700' :
-                            'bg-orange-100 text-orange-700'
-                          }`}>
-                            {app.status === 'PENDING' ? 'PENDENTE' : 
-                             app.status === 'CONFIRMED' ? 'CONFIRMADO' : 
-                             app.status === 'COMPLETED' ? 'CONCLUÍDO' : 'CANCELADO'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex justify-center space-x-1">
-                            {app.status === 'PENDING' && (
-                              <button onClick={() => updateAppointmentStatus(app.id, 'CONFIRMED')} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Confirmar"><CheckCircle size={18} /></button>
-                            )}
-                            {app.status === 'CONFIRMED' && (
-                              <button onClick={() => updateAppointmentStatus(app.id, 'COMPLETED')} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Marcar como Concluído"><TrendingUp size={18} /></button>
-                            )}
-                            {app.status !== 'CANCELLED' && app.status !== 'COMPLETED' && (
-                              <button onClick={() => updateAppointmentStatus(app.id, 'CANCELLED')} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Cancelar"><XCircle size={18} /></button>
-                            )}
-                            {(app.status === 'CANCELLED' || app.status === 'COMPLETED') && <span className="text-gray-300">-</span>}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredAppointments.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
-                          Nenhum agendamento encontrado para os filtros selecionados.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           </>
-        ) : activeTab === 'services' ? (
+        )}
+
+        {activeTab === 'agenda' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h2 className="text-xl font-bold flex items-center"><CalendarIcon className="mr-2" /> Agenda Diária</h2>
+              <div className="flex items-center space-x-4">
+                <button onClick={() => setSelectedAgendaDate(addDays(selectedAgendaDate, -1))} className="p-2 hover:bg-white rounded-full border transition"><ChevronLeft size={20} /></button>
+                <div className="text-center min-w-[200px]">
+                  <div className="font-black text-lg">{format(selectedAgendaDate, "dd 'de' MMMM", { locale: ptBR })}</div>
+                  <div className="text-xs text-gray-400 uppercase tracking-widest font-bold">{format(selectedAgendaDate, "EEEE", { locale: ptBR })}</div>
+                </div>
+                <button onClick={() => setSelectedAgendaDate(addDays(selectedAgendaDate, 1))} className="p-2 hover:bg-white rounded-full border transition"><ChevronRight size={20} /></button>
+              </div>
+              <button onClick={() => setSelectedAgendaDate(new Date())} className="text-sm font-bold text-gray-500 hover:text-black transition">HOJE</button>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-1 gap-3">
+                {getAgendaForDate(selectedAgendaDate).map(({ time, appointment }) => (
+                  <div key={time} className={`flex items-center p-4 rounded-xl border-2 transition ${appointment ? 'border-black bg-gray-50' : 'border-dashed border-gray-200 hover:border-gray-300 bg-white'}`}>
+                    <div className="w-20 font-black text-xl text-gray-400 shrink-0">{time}</div>
+                    <div className="flex-1">
+                      {appointment ? (
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="font-black text-lg flex items-center">
+                              {appointment.customerName}
+                              <span className={`ml-3 text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                                appointment.status === 'CONFIRMED' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
+                              }`}>
+                                {appointment.status}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-500 font-medium">{appointment.service.name} • {appointment.barber.name}</div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                             <a href={`https://wa.me/${appointment.customerPhone.replace(/\D/g, '')}`} target="_blank" className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition"><MessageSquare size={18} /></a>
+                             <button onClick={() => updateAppointmentStatus(appointment.id, 'CANCELLED')} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"><XCircle size={18} /></button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => {
+                            setManualBookingForm({ ...manualBookingForm, date: format(selectedAgendaDate, 'yyyy-MM-dd'), time });
+                            setIsManualBookingModalOpen(true);
+                          }}
+                          className="w-full text-left text-sm font-bold text-gray-300 hover:text-gray-500 flex items-center"
+                        >
+                          <Plus size={16} className="mr-2" /> HORÁRIO DISPONÍVEL - CLIQUE PARA AGENDAR
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'services' && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <h2 className="text-xl font-bold">Catálogo de Serviços</h2>
@@ -460,9 +501,10 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'reviews' && (
           <div className="space-y-8">
-            {/* Rating Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {ratingStats.map((stat: any) => (
                 <div key={stat.barberId} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -473,14 +515,11 @@ export default function Dashboard() {
                       {stat.average}
                     </div>
                   </div>
-                  <div className="text-gray-500 text-sm">
-                    {stat.total} avaliações no total
-                  </div>
+                  <div className="text-gray-500 text-sm">{stat.total} avaliações</div>
                 </div>
               ))}
             </div>
 
-            {/* Ratings List */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="p-6 border-b border-gray-100">
                 <h2 className="text-xl font-bold">Comentários dos Clientes</h2>
@@ -492,7 +531,7 @@ export default function Dashboard() {
                       <div>
                         <div className="font-bold">{rating.appointment.customerName}</div>
                         <div className="text-xs text-gray-400">
-                          {format(new Date(rating.createdAt), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                          {format(parseISO(rating.createdAt), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
                         </div>
                       </div>
                       <div className="flex items-center bg-yellow-50 text-yellow-700 px-2 py-1 rounded-lg text-sm font-bold">
@@ -501,21 +540,21 @@ export default function Dashboard() {
                       </div>
                     </div>
                     {rating.comment ? (
-                      <p className="text-gray-700 text-sm italic mb-4 flex items-start">
-                        <MessageSquare size={16} className="mr-2 text-gray-300 shrink-0 mt-1" />
+                      <p className="text-gray-700 text-sm italic mb-4 flex items-start bg-gray-50 p-4 rounded-xl">
+                        <MessageSquare size={16} className="mr-3 text-gray-300 shrink-0 mt-1" />
                         "{rating.comment}"
                       </p>
                     ) : (
-                      <p className="text-gray-400 text-sm italic mb-4">Sem comentário</p>
+                      <p className="text-gray-400 text-sm italic mb-4">Sem comentário por extenso.</p>
                     )}
-                    <div className="flex items-center space-x-4 text-xs">
-                      <span className="text-gray-500">Barbeiro: <span className="font-bold">{rating.appointment.barber.name}</span></span>
-                      <span className="text-gray-500">Serviço: <span className="font-bold">{rating.appointment.service.name}</span></span>
+                    <div className="flex items-center space-x-4 text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-gray-400">Barbeiro: <span className="text-black">{rating.appointment.barber.name}</span></span>
+                      <span className="text-gray-400">Serviço: <span className="text-black">{rating.appointment.service.name}</span></span>
                     </div>
                   </div>
                 )) : (
                   <div className="p-12 text-center text-gray-500">
-                    Nenhuma avaliação encontrada.
+                    Nenhuma avaliação detalhada encontrada.
                   </div>
                 )}
               </div>
@@ -537,33 +576,83 @@ export default function Dashboard() {
         )}
       </main>
 
-      {/* Service Modal */}
-      {isServiceModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            <h2 className="text-2xl font-bold mb-6">{currentService ? 'Editar Serviço' : 'Novo Serviço'}</h2>
-            <form onSubmit={handleServiceSubmit} className="space-y-4">
+      {/* Manual Booking Modal */}
+      {isManualBookingModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black">Novo Agendamento</h2>
+              <button onClick={() => setIsManualBookingModalOpen(false)} className="text-gray-400 hover:text-black"><XCircle size={24} /></button>
+            </div>
+            <form onSubmit={handleManualBookingSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Nome</label>
-                <input required className="w-full p-2 border rounded-lg" value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} />
+                <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Cliente</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 text-gray-400" size={18} />
+                  <input required placeholder="Nome do cliente" className="w-full pl-10 p-2.5 border rounded-xl" value={manualBookingForm.customerName} onChange={e => setManualBookingForm({...manualBookingForm, customerName: e.target.value})} />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Descrição</label>
-                <textarea className="w-full p-2 border rounded-lg" value={serviceForm.description} onChange={e => setServiceForm({...serviceForm, description: e.target.value})} />
+                <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">WhatsApp</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 text-gray-400" size={18} />
+                  <input required placeholder="Ex: 71999999999" className="w-full pl-10 p-2.5 border rounded-xl" value={manualBookingForm.customerPhone} onChange={e => setManualBookingForm({...manualBookingForm, customerPhone: e.target.value})} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Preço (R$)</label>
-                  <input type="number" step="0.01" required className="w-full p-2 border rounded-lg" value={serviceForm.price} onChange={e => setServiceForm({...serviceForm, price: parseFloat(e.target.value)})} />
+                  <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Data</label>
+                  <input type="date" required className="w-full p-2.5 border rounded-xl" value={manualBookingForm.date} onChange={e => setManualBookingForm({...manualBookingForm, date: e.target.value})} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Duração (min)</label>
-                  <input type="number" required className="w-full p-2 border rounded-lg" value={serviceForm.duration} onChange={e => setServiceForm({...serviceForm, duration: parseInt(e.target.value)})} />
+                  <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Hora</label>
+                  <select required className="w-full p-2.5 border rounded-xl" value={manualBookingForm.time} onChange={e => setManualBookingForm({...manualBookingForm, time: e.target.value})}>
+                    <option value="">Selecionar...</option>
+                    {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Serviço</label>
+                <select required className="w-full p-2.5 border rounded-xl" value={manualBookingForm.serviceId} onChange={e => setManualBookingForm({...manualBookingForm, serviceId: e.target.value})}>
+                  {services.map(s => <option key={s.id} value={s.id}>{s.name} - R$ {s.price.toFixed(2)}</option>)}
+                </select>
+              </div>
+              <button type="submit" className="w-full bg-black text-white p-4 rounded-2xl font-black text-lg hover:bg-gray-800 transition mt-6 shadow-xl">
+                CONFIRMAR AGENDAMENTO
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Service Modal (keeping existing) */}
+      {isServiceModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <h2 className="text-2xl font-black mb-6">{currentService ? 'Editar Serviço' : 'Novo Serviço'}</h2>
+            <form onSubmit={handleServiceSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Nome</label>
+                <input required className="w-full p-3 border rounded-2xl bg-gray-50 focus:ring-2 focus:ring-black outline-none transition" value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Descrição</label>
+                <textarea className="w-full p-3 border rounded-2xl bg-gray-50 focus:ring-2 focus:ring-black outline-none transition" value={serviceForm.description} onChange={e => setServiceForm({...serviceForm, description: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Preço (R$)</label>
+                  <input type="number" step="0.01" required className="w-full p-3 border rounded-2xl bg-gray-50" value={serviceForm.price} onChange={e => setServiceForm({...serviceForm, price: parseFloat(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-gray-400 mb-1 ml-1">Duração (min)</label>
+                  <input type="number" required className="w-full p-3 border rounded-2xl bg-gray-50" value={serviceForm.duration} onChange={e => setServiceForm({...serviceForm, duration: parseInt(e.target.value)})} />
                 </div>
               </div>
               <div className="flex justify-end space-x-3 pt-6">
                 <button type="button" onClick={() => setIsServiceModalOpen(false)} className="px-4 py-2 text-gray-500 underline">Cancelar</button>
-                <button type="submit" className="px-6 py-2 bg-black text-white rounded-lg font-bold">Salvar</button>
+                <button type="submit" className="px-8 py-3 bg-black text-white rounded-2xl font-black shadow-lg">Salvar</button>
               </div>
             </form>
           </div>
