@@ -16,3 +16,7 @@ Todas as mudanças relevantes testadas e validadas neste projeto (Scheasy v2.0) 
   - `waiting-list.routes.ts`
 - **Centralização:** O arquivo `api.ts` agora atua apenas como o hub (indexador) das sub-rotas.
 - **Resiliência:** Implementado um `errorHandler` global no Express (`utils/errorHandler.ts`), garantindo que falhas internas não derrubem o servidor e retornem respostas padronizadas.
+
+### Validação e Consistência (Sprint 2)
+- **Sanitização de Entradas (Zod):** Implementados schemas rigorosos de validação de dados para Agendamentos e Registro de Clientes, garantindo integridade das informações antes de tocarem no banco de dados.
+- **Gestão de Fusos Horários (Timezones):** A rota de cálculo de horários ocupados (`busy-slots`) foi reescrita utilizando `date-fns-tz` para fixar cálculos na timezone local (`America/Sao_Paulo`), prevenindo bugs em servidores rodando em UTC.

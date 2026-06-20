@@ -5,12 +5,17 @@ import jwt from 'jsonwebtoken';
 import { sendWhatsAppMessage } from '../services/whatsapp';
 import { format } from 'date-fns';
 
+import { customerRegistrationSchema } from '../validators/customer.validator';
+import { z } from 'zod';
+
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
 
 export const registerCustomer = async (req: Request, res: Response) => {
-  const { name, email, password, phone, address } = req.body;
-
   try {
+    const validatedData = customerRegistrationSchema.parse(req.body);
+    const { name, email, password, phone } = validatedData;
+    const address = req.body.address; // optional, not in strict schema
+
     const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
     const customer = await prisma.customer.create({
       data: {
@@ -26,6 +31,9 @@ export const registerCustomer = async (req: Request, res: Response) => {
     const token = jwt.sign({ id: customer.id, role: 'customer' }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ customer, token });
   } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validação falhou', details: error.errors });
+    }
     if (error.code === 'P2002') {
       return res.status(400).json({ error: 'E-mail ou telefone já cadastrado.' });
     }

@@ -3,10 +3,15 @@ import prisma from '../prisma';
 import { createCalendarEvent } from '../services/googleCalendar';
 import { sendWhatsAppMessage } from '../services/whatsapp';
 
+import { createAppointmentSchema } from '../validators/appointment.validator';
+import { z } from 'zod';
+
 export const createAppointment = async (req: Request, res: Response) => {
-  const { customerName, customerPhone, startTime, serviceId, barberId, wantsToRegister } = req.body;
-  
   try {
+    const validatedData = createAppointmentSchema.parse(req.body);
+    const { customerName, customerPhone, startTime, serviceId, barberId } = validatedData;
+    const wantsToRegister = req.body.wantsToRegister; // extra info not in schema
+
     const service = await prisma.service.findUnique({ where: { id: serviceId } });
     if (!service) return res.status(404).json({ error: 'Service not found' });
 
@@ -97,6 +102,9 @@ export const createAppointment = async (req: Request, res: Response) => {
 
     res.json(appointment);
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validação falhou', details: error.errors });
+    }
     console.error(error);
     res.status(500).json({ error: 'Failed to create appointment' });
   }

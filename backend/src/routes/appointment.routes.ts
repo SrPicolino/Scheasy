@@ -8,14 +8,21 @@ const router = Router();
 
 router.post('/', createAppointment);
 
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+
+const TIMEZONE = 'America/Sao_Paulo';
+
 router.get('/busy-slots', async (req, res) => {
   const { date, barberId } = req.query;
   if (!date || !barberId) return res.status(400).json({ error: 'Missing date or barberId' });
   
-  const startOfDay = new Date(`${date}T00:00:00`);
-  const endOfDay = new Date(`${date}T23:59:59`);
-  const dateObj = new Date(`${date}T00:00:00`);
+  // Trata a string 'YYYY-MM-DD' garantindo que seja 00:00:00 na fuso horário local
+  const localDateString = `${date}T00:00:00-03:00`; // Fixando America/Sao_Paulo offset
+  const dateObj = new Date(localDateString);
   const dayOfWeek = dateObj.getDay();
+
+  const startOfDay = new Date(`${date}T00:00:00-03:00`);
+  const endOfDay = new Date(`${date}T23:59:59-03:00`);
 
   const schedule = await prisma.workSchedule.findFirst({
     where: { barberId: barberId as string, dayOfWeek, isActive: true }
@@ -38,8 +45,12 @@ router.get('/busy-slots', async (req, res) => {
   const bookedTimes: string[] = [];
 
   appointments.forEach(app => {
-    const appStart = app.startTime.getHours() * 60 + app.startTime.getMinutes();
-    const appEnd = app.endTime.getHours() * 60 + app.endTime.getMinutes();
+    // Converte os horários UTC do banco para a timezone local para cálculo correto
+    const localStart = toZonedTime(app.startTime, TIMEZONE);
+    const localEnd = toZonedTime(app.endTime, TIMEZONE);
+    
+    const appStart = localStart.getHours() * 60 + localStart.getMinutes();
+    const appEnd = localEnd.getHours() * 60 + localEnd.getMinutes();
 
     TIME_SLOTS.forEach(slot => {
       const [h, m] = slot.split(':').map(Number);
