@@ -25,3 +25,9 @@ Todas as mudanças relevantes testadas e validadas neste projeto (Scheasy v2.0) 
 - **Autenticação Descentralizada:** Criado um `AuthContext` no React para gerenciar globalmente as sessões dos usuários (clientes), evitando repasse de propriedades complexas.
 - **Máscaras Dinâmicas:** Adicionada formatação visual em tempo real nos inputs de Telefone `(XX) XXXXX-XXXX` para evitar erros de entrada do usuário.
 - **Notificações Ricas:** Substituição completa dos clássicos e bloqueantes `alert()` de navegador por um sistema polido de Toasts não-obstrutivos (`react-hot-toast`) garantindo feedback elegante em caso de sucesso ou falha no login, agendamentos, e filas de espera.
+
+### Infraestrutura e Deploy (Sprint 4)
+- **Empacotamento (Docker):** Criado o `Dockerfile` para o Node (Backend) e para o Vite/Nginx (Frontend).
+- **Orquestração Inteligente:** Desenvolvido um `docker-compose.yml` que sobe o banco PostgreSQL, backend e frontend conectados e prontos para produção.
+- **Automação de Banco:** O contêiner backend foi configurado para executar `npx prisma db push` automaticamente antes de iniciar, garantindo que as tabelas sejam sempre criadas na nuvem.
+- **Documentação de Nuvem:** Criado o arquivo `DEPLOY.md` com instruções claras para deploy em VPS.

@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: barbershop_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: barbershop
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: barbershop_backend
+    environment:
+      - DATABASE_URL=postgresql://admin:adminpassword@postgres:5432/barbershop?schema=public
+      - JWT_SECRET=super_secret_docker_key
+      - PORT=3001
+      - TWILIO_ACCOUNT_SID=your_twilio_account_sid
+      - TWILIO_AUTH_TOKEN=your_twilio_auth_token
+      - TWILIO_WHATSAPP_NUMBER=+14155238886
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    command: >
+      sh -c "npx prisma db push && npm start"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:3001/api
+    container_name: barbershop_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
