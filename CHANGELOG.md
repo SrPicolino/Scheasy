@@ -15,3 +15,4 @@ Todas as mudanças relevantes testadas e validadas neste projeto (Scheasy v2.0) 
   - `service.routes.ts`
   - `waiting-list.routes.ts`
 - **Centralização:** O arquivo `api.ts` agora atua apenas como o hub (indexador) das sub-rotas.
+- **Resiliência:** Implementado um `errorHandler` global no Express (`utils/errorHandler.ts`), garantindo que falhas internas não derrubem o servidor e retornem respostas padronizadas.
