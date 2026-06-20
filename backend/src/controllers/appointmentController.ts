@@ -67,8 +67,11 @@ export const createAppointment = async (req: Request, res: Response) => {
     });
 
     // 1. Send Confirmation WhatsApp (Optional)
-    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_ACCOUNT_SID !== 'your_account_sid') {
-      const msg = `Olá ${customerName}! Recebemos seu pedido de agendamento para ${service.name} com ${barber.name} no dia ${start.toLocaleDateString('pt-BR')} às ${start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Assim que for confirmado pelo barbeiro, você receberá uma nova mensagem!`;
+    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_ACCOUNT_SID !== 'your_account_sid' && process.env.TWILIO_ACCOUNT_SID !== 'your_twilio_account_sid') {
+      const { formatInTimeZone } = await import('date-fns-tz');
+      const dateStr = formatInTimeZone(start, 'America/Sao_Paulo', 'dd/MM/yyyy');
+      const timeStr = formatInTimeZone(start, 'America/Sao_Paulo', 'HH:mm');
+      const msg = `Olá ${customerName}! Recebemos seu pedido de agendamento para ${service.name} com ${barber.name} no dia ${dateStr} às ${timeStr}. Assim que for confirmado pelo barbeiro, você receberá uma nova mensagem!`;
       await sendWhatsAppMessage(customerPhone, msg).catch(err => console.error('WhatsApp failed:', err));
     }
 
