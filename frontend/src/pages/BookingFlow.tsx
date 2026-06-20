@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Calendar, Clock, User, Scissors, CheckCircle, Award, Mail, Lock, LogOut, Phone, UserX, Eye, EyeOff, ChevronDown, List, Star as StarIcon, MapPin, Edit2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import API_URL from '../config';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -19,7 +19,11 @@ const applyPhoneMask = (value: string) => {
 
 export default function BookingFlow() {
   const navigate = useNavigate();
+  const { slug } = useParams<{ slug: string }>();
   const [step, setStep] = useState(1);
+  const [barbershop, setBarbershop] = useState<any>(null);
+  const [barbershopLoading, setBarbershopLoading] = useState(true);
+  const [barbershopError, setBarbershopError] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [barbers, setBarbers] = useState<any[]>([]);
   const [busySlots, setBusySlots] = useState<string[]>([]);
@@ -48,19 +52,24 @@ export default function BookingFlow() {
   const [waitlistSuccess, setWaitlistSuccess] = useState(false);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchBarbershop = async () => {
+      if (!slug) return;
+      setBarbershopLoading(true);
       try {
-        const [servicesRes, barbersRes] = await Promise.all([
-          axios.get(`${API_URL}/services`),
-          axios.get(`${API_URL}/barbers`),
-        ]);
-        setServices(servicesRes.data);
-        setBarbers(barbersRes.data);
+        // The barbershop endpoint returns name, logo, services, and barbers all at once
+        const res = await axios.get(`${API_URL}/barbershops/${slug}`);
+        const data = res.data;
+        setBarbershop(data);
+        setServices(data.services || []);
+        setBarbers(data.barbers || []);
       } catch (error) {
-        toast.error('Erro ao carregar dados dos barbeiros.');
+        setBarbershopError('Barbearia não encontrada. Verifique o link e tente novamente.');
+        toast.error('Barbearia não encontrada.');
+      } finally {
+        setBarbershopLoading(false);
       }
     };
-    fetchData();
+    fetchBarbershop();
 
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -69,7 +78,7 @@ export default function BookingFlow() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [slug]);
 
   useEffect(() => {
     if (selectedDate && selectedBarber) {
@@ -115,6 +124,7 @@ export default function BookingFlow() {
             startTime,
             serviceId: selectedService.id,
             barberId: selectedBarber.id,
+            barbershopId: barbershop?.id,
             customerId: null
           }
         : {
@@ -123,6 +133,7 @@ export default function BookingFlow() {
             startTime,
             serviceId: selectedService.id,
             barberId: selectedBarber.id,
+            barbershopId: barbershop?.id,
             customerId: customer.id
           };
 
@@ -157,6 +168,7 @@ export default function BookingFlow() {
         startTime,
         serviceId: selectedService.id,
         barberId: selectedBarber.id,
+        barbershopId: barbershop?.id,
         customerId: customer?.id || null
       });
       toast.success('Você entrou na fila de espera!');
@@ -187,7 +199,9 @@ export default function BookingFlow() {
     toast.success('Você saiu da conta.');
   };
 
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+  if (authLoading || barbershopLoading) return <div className="min-h-screen flex items-center justify-center"><div className="text-center"><Scissors className="w-10 h-10 animate-spin mx-auto mb-4 text-gray-400" /><p className="text-gray-500 font-bold">Carregando...</p></div></div>;
+
+  if (barbershopError) return <div className="min-h-screen flex items-center justify-center p-4"><div className="text-center"><AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" /><h2 className="text-xl font-black mb-2">Barbearia não encontrada</h2><p className="text-gray-500">{barbershopError}</p></div></div>;
 
   if (success) {
     return (
@@ -266,8 +280,17 @@ export default function BookingFlow() {
 
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-12">
-          <h1 className="text-4xl font-black mb-2 tracking-tighter">SCHEASY v2.0</h1>
+          {barbershop?.logoUrl && (
+            <img src={barbershop.logoUrl} alt={barbershop.name} className="w-20 h-20 rounded-full mx-auto mb-4 object-cover border-4 border-white shadow-lg" />
+          )}
+          {!barbershop?.logoUrl && (
+            <div className="w-20 h-20 rounded-full bg-black text-white flex items-center justify-center text-3xl font-black mx-auto mb-4 shadow-lg">
+              {barbershop?.name?.[0] || 'B'}
+            </div>
+          )}
+          <h1 className="text-4xl font-black mb-2 tracking-tighter">{barbershop?.name || 'Barbearia'}</h1>
           <p className="text-gray-500">Agende seu estilo com os melhores profissionais.</p>
+          {barbershop?.address && <p className="text-xs text-gray-400 mt-1 flex items-center justify-center"><MapPin size={12} className="mr-1" />{barbershop.address}</p>}
         </header>
 
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">

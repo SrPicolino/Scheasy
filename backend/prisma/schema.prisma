@@ -6,18 +6,42 @@ datasource db {
   provider = "postgresql"
 }
 
+model Barbershop {
+  id           String        @id @default(uuid())
+  name         String
+  slug         String        @unique // e.g. "barbearia-do-ze"
+  logoUrl      String?
+  phone        String?
+  address      String?
+  
+  admins       Admin[]
+  services     Service[]
+  barbers      Barber[]
+  appointments Appointment[]
+  waitingList  WaitingList[]
+  
+  createdAt    DateTime      @default(now())
+}
+
 model Admin {
-  id       String @id @default(uuid())
-  username String @unique
-  password String
+  id           String      @id @default(uuid())
+  username     String      @unique
+  password     String
+  
+  barbershop   Barbershop? @relation(fields: [barbershopId], references: [id])
+  barbershopId String?
 }
 
 model Service {
-  id          String        @id @default(uuid())
-  name        String
-  description String?
-  price       Float
-  duration    Int // in minutes
+  id           String      @id @default(uuid())
+  name         String
+  description  String?
+  price        Float
+  duration     Int         // in minutes
+  
+  barbershop   Barbershop  @relation(fields: [barbershopId], references: [id])
+  barbershopId String
+
   appointments Appointment[]
   waitingList  WaitingList[]
 }
@@ -25,12 +49,18 @@ model Service {
 model Barber {
   id               String        @id @default(uuid())
   name             String
-  email            String        @unique
+  email            String
   googleCalendarId String?
-  googleTokens     String?       // New field to store JSON tokens
+  googleTokens     String?
+  
+  barbershop       Barbershop    @relation(fields: [barbershopId], references: [id])
+  barbershopId     String
+
   appointments     Appointment[]
   schedules        WorkSchedule[]
   waitingList      WaitingList[]
+
+  @@unique([email, barbershopId])
 }
 
 model WorkSchedule {
@@ -51,9 +81,9 @@ model Customer {
   password      String?
   googleId      String?  @unique
   phone         String   @unique
-  address       String?  // New field
-  loyaltyPoints Int      @default(0) // 1 point per completed appointment
-  isRegistered  Boolean  @default(true) // Always true now if they exist in this new flow
+  address       String?  
+  loyaltyPoints Int      @default(0)
+  isRegistered  Boolean  @default(true) 
   appointments  Appointment[]
   waitingList   WaitingList[]
   createdAt     DateTime @default(now())
@@ -66,20 +96,23 @@ model Appointment {
   startTime     DateTime
   endTime       DateTime
   googleEventId String?
-  status        String   @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED
+  status        String   @default("PENDING")
 
-  service   Service @relation(fields: [serviceId], references: [id])
-  serviceId String
+  barbershop    Barbershop @relation(fields: [barbershopId], references: [id])
+  barbershopId  String
 
-  barber   Barber @relation(fields: [barberId], references: [id])
-  barberId String
+  service       Service @relation(fields: [serviceId], references: [id])
+  serviceId     String
 
-  customer   Customer? @relation(fields: [customerId], references: [id])
-  customerId String?
+  barber        Barber @relation(fields: [barberId], references: [id])
+  barberId      String
 
-  rating    Rating?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  customerId    String?
+
+  rating        Rating?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model WaitingList {
@@ -87,13 +120,17 @@ model WaitingList {
   customerName  String
   customerPhone String
   startTime     DateTime
+
+  barbershop    Barbershop @relation(fields: [barbershopId], references: [id])
+  barbershopId  String
+
   serviceId     String
   service       Service  @relation(fields: [serviceId], references: [id])
   barberId      String
   barber        Barber   @relation(fields: [barberId], references: [id])
   customerId    String?
   customer      Customer? @relation(fields: [customerId], references: [id])
-  status        String    @default("WAITING") // WAITING, NOTIFIED, EXPIRED
+  status        String    @default("WAITING")
   createdAt     DateTime @default(now())
 
   @@index([startTime, barberId])
@@ -110,8 +147,8 @@ model Rating {
 
 model AnticipationNotification {
   id            String   @id @default(uuid())
-  appointmentId String   // The later appointment that could be moved
-  slotId        String   // The ID of the cancelled appointment (the slot)
+  appointmentId String   
+  slotId        String   
   sentAt        DateTime @default(now())
 
   @@unique([appointmentId, slotId])

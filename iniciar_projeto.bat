@@ -1,11 +1,11 @@
 @echo off
 setlocal
-title Scheasy v2.0 - Sistema de Gestão
+title Scheasy v3.0 SaaS - Sistema Multi-Barbearia
 color 0B
 
 echo =======================================================
-echo                 SCHEASY v2.0
-echo       SISTEMA DE AGENDAMENTO PROFISSIONAL
+echo                 SCHEASY v3.0 SaaS
+echo       PLATAFORMA MULTI-BARBEARIA PROFISSIONAL
 echo =======================================================
 echo.
 
@@ -45,14 +45,18 @@ start "FRONTEND - Barbershop v2.0" cmd /c "cd /d %FRONTEND_DIR% && npm.cmd run d
 echo.
 echo [OK] Aguardando inicialização para abrir o navegador...
 timeout /t 5 /nobreak >nul
-start http://localhost:5173
+start http://localhost:5173/demo
 
 echo.
 echo -------------------------------------------------------
-echo SISTEMA INICIADO COM SUCESSO!
+echo SISTEMA INICIADO COM SUCESSO! (SaaS v3.0)
 echo.
-echo - Frontend: http://localhost:5173
-echo - Admin:    http://localhost:5173/admin
+echo - Barbearia Demo:  http://localhost:5173/demo
+echo - Admin (Demo):    http://localhost:5173/admin
+echo.
+echo Para adicionar uma nova barbearia:
+echo   Use a API POST /api/barbershops com { name, slug }
+echo   Acesse pelo link: http://localhost:5173/SEU-SLUG
 echo -------------------------------------------------------
 echo.
 echo Pressione qualquer tecla para sair desta janela.

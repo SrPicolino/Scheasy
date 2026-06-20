@@ -7,6 +7,7 @@ export const createAppointmentSchema = z.object({
   endTime: z.string().datetime({ message: "Data de término inválida" }),
   serviceId: z.string().uuid("ID de serviço inválido"),
   barberId: z.string().uuid("ID de barbeiro inválido"),
+  barbershopId: z.string().uuid("ID de barbearia inválido"),
   customerId: z.string().uuid("ID de cliente inválido").optional().nullable()
 });
 

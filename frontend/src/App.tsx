@@ -15,13 +15,10 @@ function App() {
       <Toaster position="top-center" />
       <Router>
         <Routes>
-          {/* Public Booking Flow */}
-          <Route path="/" element={<BookingFlow />} />
-          
-          {/* Client Area */}
+          {/* Client Area (before slug to avoid collision) */}
           <Route path="/my-account" element={<ClientProfile />} />
           
-          {/* Evaluation Page */}
+          {/* Evaluation Page (before slug) */}
           <Route path="/evaluate/:appointmentId" element={<Evaluation />} />
 
           {/* Admin Login */}
@@ -33,8 +30,12 @@ function App() {
             element={isAuthenticated() ? <Dashboard /> : <Navigate to="/login" />} 
           />
 
-          {/* Redirect any unknown route to booking */}
-          <Route path="*" element={<Navigate to="/" />} />
+          {/* Default: redirect to a demo slug */}
+          <Route path="/" element={<Navigate to="/demo" />} />
+
+          {/* Public Booking Flow - Dynamic slug per barbershop (e.g. /barbearia-do-ze) */}
+          {/* This MUST be last to avoid swallowing other routes */}
+          <Route path="/:slug" element={<BookingFlow />} />
         </Routes>
       </Router>
     </AuthProvider>

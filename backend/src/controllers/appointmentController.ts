@@ -9,7 +9,7 @@ import { z } from 'zod';
 export const createAppointment = async (req: Request, res: Response) => {
   try {
     const validatedData = createAppointmentSchema.parse(req.body);
-    const { customerName, customerPhone, startTime, serviceId, barberId } = validatedData;
+    const { customerName, customerPhone, startTime, serviceId, barberId, barbershopId } = validatedData;
     const wantsToRegister = req.body.wantsToRegister; // extra info not in schema
 
     const service = await prisma.service.findUnique({ where: { id: serviceId } });
@@ -62,6 +62,7 @@ export const createAppointment = async (req: Request, res: Response) => {
         endTime: end,
         serviceId,
         barberId,
+        barbershopId,
         customerId: customerId || null // null if Guest
       },
     });
@@ -114,8 +115,11 @@ export const createAppointment = async (req: Request, res: Response) => {
 };
 
 export const getAppointments = async (req: Request, res: Response) => {
+  const { barbershopId } = req.query;
   try {
+    const where = barbershopId ? { barbershopId: String(barbershopId) } : {};
     const appointments = await prisma.appointment.findMany({
+      where,
       include: { service: true, barber: true, customer: true },
       orderBy: { startTime: 'asc' }
     });
