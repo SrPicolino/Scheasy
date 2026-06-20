@@ -5,8 +5,17 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import API_URL from '../config';
+import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const TIME_SLOTS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
+
+const applyPhoneMask = (value: string) => {
+  const v = value.replace(/\D/g, '').substring(0, 11);
+  if (v.length <= 2) return v ? `(${v}` : '';
+  if (v.length <= 6) return `(${v.substring(0, 2)}) ${v.substring(2)}`;
+  return `(${v.substring(0, 2)}) ${v.substring(2, 7)}-${v.substring(7)}`;
+};
 
 export default function BookingFlow() {
   const navigate = useNavigate();
@@ -22,12 +31,10 @@ export default function BookingFlow() {
   const [selectedTime, setSelectedTime] = useState('');
   
   // Auth States
-  const [token, setToken] = useState(localStorage.getItem('customerToken'));
-  const [customer, setCustomer] = useState<any>(null);
+  const { customer, login, logout, loading: authLoading } = useAuth();
   const [loginEmail, setEmail] = useState('');
   const [loginPassword, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [authError, setAuthError] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
@@ -50,14 +57,10 @@ export default function BookingFlow() {
         setServices(servicesRes.data);
         setBarbers(barbersRes.data);
       } catch (error) {
-        console.error('Error fetching data:', error);
+        toast.error('Erro ao carregar dados dos barbeiros.');
       }
     };
     fetchData();
-
-    if (token) {
-      fetchProfile();
-    }
 
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -66,19 +69,7 @@ export default function BookingFlow() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [token]);
-
-  const fetchProfile = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/customer/profile`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setCustomer(res.data);
-    } catch (err) {
-      setToken(null);
-      localStorage.removeItem('customerToken');
-    }
-  };
+  }, []);
 
   useEffect(() => {
     if (selectedDate && selectedBarber) {
@@ -100,16 +91,14 @@ export default function BookingFlow() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setAuthError('');
     try {
       const res = await axios.post(`${API_URL}/customer/login`, { email: loginEmail, password: loginPassword });
-      localStorage.setItem('customerToken', res.data.token);
-      setToken(res.data.token);
-      setCustomer(res.data.customer);
+      login(res.data.token, res.data.customer);
+      toast.success('Login realizado com sucesso!');
       setIsGuest(false);
       setStep(4);
     } catch (err: any) {
-      setAuthError(err.response?.data?.error || 'Erro no login.');
+      toast.error(err.response?.data?.error || 'Erro no login.');
     } finally {
       setLoading(false);
     }
@@ -138,10 +127,11 @@ export default function BookingFlow() {
           };
 
       await axios.post(`${API_URL}/appointments`, payload);
+      toast.success('Agendamento realizado com sucesso!');
       setSuccess(true);
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || 'Erro ao agendar. Verifique se o horário está disponível.';
-      alert(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -153,8 +143,8 @@ export default function BookingFlow() {
       return;
     }
 
-    if (isGuest && (!guestName || !guestPhone)) {
-      alert('Por favor, preencha seu nome e WhatsApp para entrar na fila.');
+    if (isGuest && (!guestName || !guestPhone || guestPhone.length < 14)) {
+      toast.error('Por favor, preencha seu nome e WhatsApp (completo) para entrar na fila.');
       return;
     }
 
@@ -169,9 +159,10 @@ export default function BookingFlow() {
         barberId: selectedBarber.id,
         customerId: customer?.id || null
       });
+      toast.success('Você entrou na fila de espera!');
       setWaitlistSuccess(true);
     } catch (error: any) {
-      alert('Erro ao entrar na fila de espera.');
+      toast.error('Erro ao entrar na fila de espera.');
     } finally {
       setLoading(false);
     }
@@ -190,12 +181,13 @@ export default function BookingFlow() {
     return parts[0].substring(0, 2).toUpperCase();
   };
 
-  const logout = () => {
-    localStorage.removeItem('customerToken');
-    setToken(null);
-    setCustomer(null);
+  const handleLogout = () => {
+    logout();
     setShowUserMenu(false);
+    toast.success('Você saiu da conta.');
   };
+
+  if (authLoading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
 
   if (success) {
     return (
@@ -254,7 +246,7 @@ export default function BookingFlow() {
                   </button>
                 </div>
                 <div className="border-t border-gray-50 pt-1">
-                  <button onClick={logout} className="w-full flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition font-bold">
+                  <button onClick={handleLogout} className="w-full flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition font-bold">
                     <LogOut size={16} className="mr-3" /> Sair
                   </button>
                 </div>
@@ -388,8 +380,7 @@ export default function BookingFlow() {
                         <input required type={showPassword ? 'text' : 'password'} value={loginPassword} onChange={e => setPassword(e.target.value)} className="w-full pl-12 pr-12 p-3.5 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-black transition" placeholder="Senha" />
                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3.5 text-gray-400 hover:text-black">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
                       </div>
-                      {authError && <p className="text-red-500 text-xs text-center font-bold">{authError}</p>}
-                      <button type="submit" className="w-full bg-black text-white p-4 rounded-2xl font-black shadow-lg hover:bg-gray-800 transition">ENTRAR E FINALIZAR</button>
+                      <button type="submit" disabled={loading} className="w-full bg-black text-white p-4 rounded-2xl font-black shadow-lg hover:bg-gray-800 transition disabled:opacity-50">ENTRAR E FINALIZAR</button>
                     </form>
 
                     <div className="mt-8 flex flex-col space-y-3">
@@ -416,7 +407,7 @@ export default function BookingFlow() {
                              <AlertCircle size={16} className="mr-2 shrink-0" /> Você está agendando sem uma conta. Não acumulará pontos neste modo.
                           </div>
                           <input required placeholder="Nome Completo" className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-black" value={guestName} onChange={e => setGuestName(e.target.value)} />
-                          <input required placeholder="WhatsApp (DDD + Número)" className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-black" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} />
+                          <input required placeholder="WhatsApp (DDD + Número)" className="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-black" value={guestPhone} onChange={e => setGuestPhone(applyPhoneMask(e.target.value))} maxLength={15} />
                         </div>
                       )}
                     </div>
